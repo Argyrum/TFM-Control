@@ -1,6 +1,6 @@
 # TFM Control
 
-Anàlisi de la planta de pràctiques de DS i CA.
+Control directe per histeresi de la tensió de sortida en convertidors CC-CA
 
 [Memòria a Overleaf](https://www.overleaf.com/read/nsjwhhqxvttr#c5d1a6) (Només lectura)
 
