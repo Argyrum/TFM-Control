@@ -1,5 +1,5 @@
 function J = lprsmatrint(A, B, C, w)
-% Calculation of a point of the LPRS for matrix-vector system description, dx/dt = Ax+Bu; y = Cx
+% Calculation of a point of the LPRS for matrix-vector system description having an integrating plant, dx/dt = Ax+Bu; y = Cx
 %   w - frequency
 
 n = size(A, 1);
