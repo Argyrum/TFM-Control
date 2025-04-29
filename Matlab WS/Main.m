@@ -17,7 +17,7 @@ E = 400; % V - DC supply voltage
 fg = 50; % Hz - Reference frequency
 vr = 230; % V - Reference RMS voltage
 
-% Filter
+% Filter - Calculator http://sim.okawa-denshi.jp/en/RLCtool.php
 fs = 50e3; % Hz - Switching frequency
 Lf = 22e-6; % H - Filter inductance
 Cf = 470e-6; % F - Filter capacitance
@@ -29,17 +29,22 @@ tfplots = true;
 
 % LPRS
 fm = 500e3; % Hz - Maximum evaluated switching frequency
-b = 5e-3; % V - Relay hysteresis amplitude, 0 to disable analysis
+b = 0.1; % V - Relay hysteresis amplitude, 0 to disable analysis
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
 lprsverbose = true; % Whether to print to console LPRS check verbose results
 lprsplots = true; % Whether to plot LPRS check results
 
 %% Compute Low Pass LC filter component values
+% wc^2/(s^2 + 2chi wc + wc^2), LC = 1/(wc)^2, RC = 1/(2chi wc) = Q/wc
+
 % Compute the cut-off as the geometric mean of grid and switching freq.
 fc = sqrt(fg*fs); % Hz - Cut-off frequency
 
 % Compute optimal C (fc = 1/(2*pi*sqrt(L*C)))
 Cfo = 1/(Lf*(2*pi*fc)^2); % F - Optimal filter capacitance
+
+% Compute R to avoid resonance (Rfo = Q/(C*wc) for Q = 0.707)
+Rfo = 0.707*sqrt(Lf*Cf)/Cf;
 
 %% Compute plant
 G = tf(E, [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from u
@@ -78,6 +83,14 @@ wg = 2*pi*fg; % Grid (reference) angular frequency
 % Option 1: Gc(w)=0 -> Gc(w) = (s^2 + w^2)
 % Since Gc must be rd 1 or 0: Gc = k * (s^2 + w^2) / (a1*s^3 + a2*s^2 + a3*s + 1)
 
+% Filter realizations:
+% https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf
+% https://sound-au.com/articles/notch-filters.htm
+% https://sound-au.com/articles/active-filters.htm
+
+% Twin T notch calculators
+% http://sim.okawa-denshi.jp/en/TwinTCRkeisan.htm
+
 %% Compensator 1: passive Twin T notch
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 
@@ -88,20 +101,20 @@ function out = GcOptimComp1(coefs, G) % coefs = [tau]
     global wg
     Gc = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs(1) 1]);
     Ga = G + Gc;
-    out = real([pole(Ga); zero(Ga)]);
+    out = real([max(pole(Ga)); max(zero(Ga))]);
 end
 
-coefs1 = 1;
-coefs1 = FindCompensator(@(x)GcOptimComp1(x, G), coefs1, 0)
+coefs1 = 2e-3;
+coefs1 = FindCompensator(@(x)GcOptimComp1(x, G), coefs1, 0, 1e-5)
 
 Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs1(1) 1]);
 Ga1 = G + Gc1;
 
-CheckTF(Gc1, 'Gc1', true, true);
+%CheckTF(Gc1, 'Gc1', true, true);
 CheckTF(Ga1, 'Ga1', true, true);
 
 CheckLPRS(Ga1, 'Ga1', warr, c, b, lprsverbose, lprsplots);
-
+return
 %% Compensator 2: active Twin T notch
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 
@@ -115,17 +128,17 @@ function out = GcOptimComp2(coefs, G) % coefs = [Q, tau]
     out = real([pole(Ga); zero(Ga)]);
 end
 
-coefs2 = [10, 1];
+coefs2 = [10 1];
 coefs2 = FindCompensator(@(x)max(GcOptimComp2(x, G)), coefs2, [-inf eps])
 
 Gc2 = tf([1 0 wg^2], [1 wg/coefs2(1) wg^2])*tf(1, [coefs2(2) 1]);
 Ga2 = G + Gc2;
 
 CheckTF(Gc2, 'Gc2', true, true);
-CheckTF(Ga2, 'Ga2', true, true);
+%CheckTF(Ga2, 'Ga2', true, true);
 
 % Solution not fit for LPRS calculations
-%0
+%CheckLPRS(Ga2, 'Ga2', warr, c, b, lprsverbose, lprsplots);
 
 %% Compensator 3: active Bainter notch
 % Bainter notch is rd = 0, add LP single pole for rd = 1
