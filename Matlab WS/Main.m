@@ -2,6 +2,7 @@
 close all;
 clear variables;
 clc;
+format shorte;
 
 %% Set up workspace path
 if ~contains(path,"LPRS")
@@ -17,103 +18,45 @@ fg = 50; % Hz - Reference frequency
 vr = 230; % V - Reference RMS voltage
 
 % Filter
-fs = 20e3; % Hz - Switching frequency
-Lf = 330e-6; % H - Filter inductance
-Rf = 75e-3; % Ohm - Filter inductor resistance
+fs = 50e3; % Hz - Switching frequency
+Lf = 22e-6; % H - Filter inductance
+Cf = 470e-6; % F - Filter capacitance
+Rf = 37e-3; % Ohm - Filter inductor resistance
 
-% Relay
-b = 0.01; % Relay input hysteresis amplitude (symmetrical)
+% TFs
+tfverbose = true;
+tfplots = true;
+
+% LPRS
+fm = 500e3; % Hz - Maximum evaluated switching frequency
+b = 5e-3; % V - Relay hysteresis amplitude, 0 to disable analysis
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
+lprsverbose = true; % Whether to print to console LPRS check verbose results
+lprsplots = true; % Whether to plot LPRS check results
 
 %% Compute Low Pass LC filter component values
 % Compute the cut-off as the geometric mean of grid and switching freq.
 fc = sqrt(fg*fs); % Hz - Cut-off frequency
 
-% Compute C (fc = 1/(2*pi*sqrt(L*C)))
-% Alt: https://electronics.stackexchange.com/questions/695465/digikey-and-others-are-incorrect-about-cutoff-frequency-for-an-lc-filter
-Cf = (2*pi*fc)^-2/Lf; % F - Filter capacitance
-
+% Compute optimal C (fc = 1/(2*pi*sqrt(L*C)))
+Cfo = 1/(Lf*(2*pi*fc)^2); % F - Optimal filter capacitance
 
 %% Compute plant
 G = tf(E, [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from u
-Gss = ss(G); %% SS - State-Space description of G
 Zo = -tf([Lf, Rf], [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from Io
 
-% Analyse plant
-%isproper(G)
-%disp('Poles:')
-%pole(G)
-disp('Zeros:');
-disp(zero(G));
-disp('Damping characteristics:');
-damp(G);
+CheckTF(G, 'G', tfverbose, tfplots);
 
-%% Plot plant
-figure;
-subplot(2, 2, 1), step(G);
-subplot(2, 2, 2), bode(G);
-subplot(2, 2, 3), nyquist(G);
-subplot(2, 2, 4), rlocusplot(G);
-sgtitle('G response characteristics')
+%% Set up LPRS
+farr = 0:2:fm; % Hz - Evaluate LPRS for frequencies 0 to fm Hz
+warr = farr*2*pi; % Rad/s - Angular frequency equivalent
 
-%% Compute LPRS' J(w)
-f = 0:2:500000; % Hz - Evaluate LPRS for frequencies 0 to 500 kHz
-w = f*2*pi; % Rad/s - Angular frequency equivalent
-
-% Find intersections with |pi*b/(4*c)|
-J = arrayfun(@(w) lprsmatr(Gss.A, Gss.B, Gss.C, w), w); % Complex - LPRS of G(w)
-imJ = imag(J);
-
-%icabove = find(1 == conv(imJ < pi*b/(4*c), [1 -1], 'same')); % Index - Crossings above -> below (index of above)
-%cabove = size(icabove, 2); % Nº of crossings above
-
-icbelow = find(1 == conv(imJ > -pi*b/(4*c), [1 -1], 'same')); % Index - Crossings below -> above (index of below)
-cbelow = size(icbelow, 2); % Nº of crossings below
-
-% Find the index(s) of the limit frequency(s)
-%JS = arrayfun(@(w) TestOrbitalStability(Gss.A, Gss.B, Gss.C, w), w); % Bool - Is J(w) stable
-%iwS = find(1 == conv(JS, [1 -1])) % Find transition 0 -> 1 (index of 0)
-
-% Find the index of the minimum limit stable frequency (first value from 0)
-[wS, iwS] = FindOrbitalStabilityLimit(Gss.A, Gss.B, Gss.C, w); % First w to be stable
-
-%% Plot LPRS information
-
-%disp('Rad/s of crossings at pi*b/(4*c):') <- Apparently, only crosses below
-%for wi = w(icabove)
-    %fprintf('    w = %f (kn = %f, f = %.2f Hz)\n', wi, ComputeKn(Gss.A, Gss.B, Gss.C, wi), wi/(2*pi))
-%end
-%disp('Rad/s of crossings at -pi*b/(4*c):') <- Superseded by FindWnPrecise
-%for wi = w(icbelow)
-    %fprintf('    w = %f (kn = %f, f = %.2f Hz)\n', wi, ComputeKn(Gss.A, Gss.B, Gss.C, wi), wi/(2*pi))
-%end
-fprintf('\nLimit frequency(s) for stability:\n')
-for wi = w(iwS)
-    fprintf('    w = %f (kn = %f, f = %.2f Hz)\n', wi, ComputeKn(Gss.A, Gss.B, Gss.C, wi), wi/(2*pi))
-end
-fprintf('\nFirst system equilibrium frequency:\n')
-[~, ~, Kn] = FindWnPrecise(Gss.A, Gss.B, Gss.C, b, c, wS);
-
-figure;
-
-%Plot J
-subplot(2, 1, 1), plot(real(J), imJ);
-title("LPRS plot (Base plant)"), xlabel("Re J(w)"), ylabel("Im J(w)");
-yline(-pi*b/(4*c), 'r');
-legend(["J(w)", "-pi*b/(4*c)"]);
-
-%Plot Im J vs w
-JS = [false([1, iwS-1]) true([1, length(w)-(iwS-1)])]; % Stability mask for w (1 stable, 0 not)
-
-subplot(2, 1, 2), plot(w(JS), imJ(JS), w(~JS), imJ(~JS));
-%title(sprintf("Im J(w) crossing with |pi*b/(4*c)|: %d above and %d below", sum(cabove), sum(cbelow))), xlabel("w"), ylabel("Im J(w)");
-title(sprintf("Im J(w) crossing with -pi*b/(4*c): %d", cbelow)), xlabel("w"), ylabel("Im J(w)");
-%yline(pi*b/(4*c).*[1 -1], 'r');
-yline(-pi*b/(4*c), 'r');
-legend(["Im J(w) Stable", "Im J(w) Unstable", "-pi*b/(4*c)"]);
-axis([0, 1e6, -1.5, pi*b/(4*c)*10]);
+%% Compute LPRS for base plant G
+[wS, iwS, KnS, bS] = CheckLPRS(G, 'G', warr, c, b, lprsverbose, lprsplots);
 
 %% Compute PFC (Check ASPRness)
+
+wg = 2*pi*fg; % Grid (reference) angular frequency
 
 % Parallel (Ga = G + Gc)
 % Hard requirement: Ga rd = 1, minimum phase
@@ -133,188 +76,126 @@ axis([0, 1e6, -1.5, pi*b/(4*c)*10]);
 
 % Optimization, fmincon, fminsearch
 % Option 1: Gc(w)=0 -> Gc(w) = (s^2 + w^2)
-% Since Gc must be rd 1: Gc = k * (s^2 + w^2) / (a1*s^3 + a2*s^2 + a3*s + 1)
+% Since Gc must be rd 1 or 0: Gc = k * (s^2 + w^2) / (a1*s^3 + a2*s^2 + a3*s + 1)
 
-%% Compensator by optimization
+%% Compensator 1: passive Twin T notch
+% Twin T notch is rd = 0, add LP single pole for rd = 1
 
-% G has 2 dof in denominator and 1 in numerator
-% For full placement capabilities we need 3 dof compensator
-% 3 dof + rd 1 => 2n order (2 poles + 1 zero)
-% G = tf(b0, [a2 a1 1])
-% Gc = tf([d1 1], [c2 c1 1])
+fprintf('\n-- Compensator 1: Passive Twin T notch + LP pole --\n');
 
-% Case I: Restrict compensator dof to real numbers
-
-GcD = [1 1];
-GcN = 1;
-
-fprintf('-- Compensator denominator --\n');
-
-%options = optimset('PlotFcns',@optimplotfval, 'MaxFunEvals', 10000, 'MaxIter', 10000);
-%options = optimset('Display', 'iter', 'MaxFunEvals', 10000, 'MaxIter', 10000);
-options = optimset('MaxFunEvals', 10000, 'MaxIter', 10000);
-
-function out = GcOptimDen(coefs, G)
-    Gc = tf(1, [coefs 1]);
+% Implements: Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [tau 1]);
+function out = GcOptimComp1(coefs, G) % coefs = [tau]
+    global wg
+    Gc = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs(1) 1]);
     Ga = G + Gc;
-    out = max(real(pole(Ga)));
+    out = real([pole(Ga); zero(Ga)]);
 end
 
-[GcD, ~, exitflag] = fminsearch(@(x)GcOptimDen(x, G), GcD, options);
+coefs1 = 1;
+coefs1 = FindCompensator(@(x)GcOptimComp1(x, G), coefs1, 0)
 
-if (exitflag ~= 1)
-    fprintf('ERROR - Could not find solution (Den)\n');
-else
-    fprintf('OK - Solution found within Tol (Den)\n');
-end
+Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs1(1) 1]);
+Ga1 = G + Gc1;
 
-fprintf('-- Compensator numerator --\n');
+CheckTF(Gc1, 'Gc1', true, true);
+CheckTF(Ga1, 'Ga1', true, true);
 
-%options = optimset('PlotFcns',@optimplotfval, 'MaxFunEvals', 10000, 'MaxIter', 10000);
-%options = optimset('Display', 'iter', 'MaxFunEvals', 10000, 'MaxIter', 10000);
-options = optimset('MaxFunEvals', 10000, 'MaxIter', 10000);
+CheckLPRS(Ga1, 'Ga1', warr, c, b, lprsverbose, lprsplots);
 
-function out = GcOptimNum(coefs, G, GcD)
-    Gc = tf([coefs 1], [GcD 1]);
+%% Compensator 2: active Twin T notch
+% Twin T notch is rd = 0, add LP single pole for rd = 1
+
+fprintf('\n-- Compensator 2: Active Twin T notch + LP pole --\n');
+
+% Implements: Gc2 = tf([1 0 wg^2], [1 wg/Q wg^2])*tf(1, [tau 1]);
+function out = GcOptimComp2(coefs, G) % coefs = [Q, tau]
+    global wg
+    Gc = tf([1 0 wg^2], [1 wg/coefs(1) wg^2])*tf(1, [coefs(2) 1]);
     Ga = G + Gc;
-    out = max(real(zero(Ga)));
+    out = real([pole(Ga); zero(Ga)]);
 end
 
-[GcN, ~, exitflag] = fminsearch(@(x)GcOptimNum(x, G, GcD), GcN, options);
+coefs2 = [10, 1];
+coefs2 = FindCompensator(@(x)max(GcOptimComp2(x, G)), coefs2, [-inf eps])
 
-if (exitflag ~= 1)
-    fprintf('ERROR - Could not find solution (Num)\n');
-else
-    fprintf('OK - Solution found within Tol (Num)\n');
+Gc2 = tf([1 0 wg^2], [1 wg/coefs2(1) wg^2])*tf(1, [coefs2(2) 1]);
+Ga2 = G + Gc2;
+
+CheckTF(Gc2, 'Gc2', true, true);
+CheckTF(Ga2, 'Ga2', true, true);
+
+% Solution not fit for LPRS calculations
+%0
+
+%% Compensator 3: active Bainter notch
+% Bainter notch is rd = 0, add LP single pole for rd = 1
+
+fprintf('\n-- Compensator 3: Active Bainter notch + LP pole --\n');
+
+% Gc3 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+function out = GcOptimComp3(coefs, G) % coefs = [wo, Q, tau]
+    global wg
+    Gc = tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
+    Ga = G + Gc;
+    out = real([pole(Ga); zero(Ga)]);
 end
 
-fprintf('-- Compensator --\n');
+coefs3 = [100, 0.707, 0.5];
+coefs3 = FindCompensator(@(x)max(GcOptimComp3(x, G)), coefs3, [eps eps eps])
 
-Gc = tf([GcN 1], [GcD 1])
+Gc3 = tf([1 0 wg^2], [1 coefs3(1)/coefs3(2) coefs3(1)^2])*tf(1, [coefs3(3) 1]);
+Ga3 = G + Gc3;
 
-Ga = G + Gc;
+CheckTF(Gc3, 'Gc3', true, true);
+CheckTF(Ga3, 'Ga3', true, true);
 
-disp('Zeros (Ga):');
-disp(zero(Ga));
-disp('Damping characteristics (Ga):');
-damp(Ga);
+CheckLPRS(Ga3, 'Ga3', warr, c, b, lprsverbose, lprsplots);
 
-%% Plot augmented plant
-figure;
-subplot(2, 2, 1), step(Ga);
-subplot(2, 2, 2), bode(Ga);
-subplot(2, 2, 3), nyquist(Ga);
-subplot(2, 2, 4), rlocusplot(Ga);
-sgtitle('Ga response characteristics')
+%% Compensator 3.2: active Bainter notch
+% Bainter notch is rd = 0, add LP single pole for rd = 1
 
-%% Plot LPRS information (Ga)
+fprintf('\n-- Compensator 3.2: Active Bainter notch + LP pole --\n');
 
-% Find intersections with |pi*b/(4*c)|
-Gass = ss(Ga);
-Ja = arrayfun(@(w) lprsmatr(Gass.A, Gass.B, Gass.C, w), w); % Complex - LPRS of G(w)
-imJa = imag(Ja);
-
-icbelowa = find(1 == conv(imJa > -pi*b/(4*c), [1 -1], 'same')); % Index - Crossings below -> above (index of below)
-cbelowa = size(icbelowa, 2); % Nº of crossings below
-
-% Find the index of the minimum limit stable frequency (first value from 0)
-[wSa, iwSa] = FindOrbitalStabilityLimit(Gass.A, Gass.B, Gass.C, w); % First w to be stable
-
-fprintf('\nLimit frequency(s) for stability:\n')
-for wi = w(iwSa)
-    fprintf('    w = %f (kn = %f, f = %.2f Hz)\n', wi, ComputeKn(Gass.A, Gass.B, Gass.C, wi), wi/(2*pi))
+% Gc3.2 = H*tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+function out = GcOptimComp32(coefs, G) % coefs = [wo, Q, tau, H]
+    global wg
+    Gc = coefs(4)*tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
+    Ga = G + Gc;
+    out = real([pole(Ga); zero(Ga)]);
 end
-fprintf('\nFirst system equilibrium frequency:\n')
-FindWnPrecise(Gass.A, Gass.B, Gass.C, b, c, wSa);
 
-figure;
+coefs32 = [100, 0.5, 0.5, 1];
+coefs32 = FindCompensator(@(x)max(GcOptimComp32(x, G)), coefs32, [eps eps eps eps])
 
-%Plot J
-subplot(2, 1, 1), plot(real(Ja), imJa);
-title("LPRS plot (Amplified plant)"), xlabel("Re J(w)"), ylabel("Im J(w)");
-yline(-pi*b/(4*c), 'r');
-legend(["J(w)", "-pi*b/(4*c)"]);
+Gc32 = coefs32(4)*tf([1 0 wg^2], [1 coefs32(1)/coefs32(2) coefs32(1)^2])*tf(1, [coefs32(3) 1]);
+Ga32 = G + Gc32;
 
-%Plot Im J vs w
-JSa = [false([1, iwSa-1]) true([1, length(w)-(iwSa-1)])]; % Stability mask for w (1 stable, 0 not)
+CheckTF(Gc32, 'Gc32', true, true);
+CheckTF(Ga32, 'Ga32', true, true);
 
-subplot(2, 1, 2), plot(w(JSa), imJa(JSa), w(~JSa), imJa(~JSa));
-%title(sprintf("Im J(w) crossing with |pi*b/(4*c)|: %d above and %d below", sum(cabove), sum(cbelow))), xlabel("w"), ylabel("Im J(w)");
-title(sprintf("Im J(w) crossing with -pi*b/(4*c): %d", cbelowa)), xlabel("w"), ylabel("Im J(w)");
-%yline(pi*b/(4*c).*[1 -1], 'r');
-yline(-pi*b/(4*c), 'r');
-legend(["Im J(w) Stable", "Im J(w) Unstable", "-pi*b/(4*c)"]);
-axis([0, 1e6, -1.5, pi*b/(4*c)*10]);
+CheckLPRS(Ga32, 'Ga32', warr, c, b, lprsverbose, lprsplots);
 
-%% Add 50 Hz notch filter (-+50 Hz zero)
-wg = 2*pi*fg; % Grid (reference) angular frequency
-rho = 1;
+%% Compensator 4: active Boctor notch
+% Boctor notch is rd = 0, add LP single pole for rd = 1
 
-%GcF = Gc * tf([1 0 wg^2], [1 2*rho rho^2+wg^2]); % Second order notch filter
-GcF = Gc * tf([1/wg 0], [1/wg 1]); % First order high pass filter
-GaF = G + GcF;
+fprintf('\n-- Compensator 4: Active Boctor notch + LP pole --\n');
 
-disp('Zeros (GaF):');
-disp(zero(GaF));
-disp('Damping characteristics (GaF):');
-damp(GaF);
-
-%% Plot augmented plant
-figure;
-subplot(2, 2, 1), step(GaF);
-subplot(2, 2, 2), bode(GaF);
-subplot(2, 2, 3), nyquist(GaF);
-subplot(2, 2, 4), rlocusplot(GaF);
-sgtitle('GaF response characteristics')
-
-%% Plot LPRS information (GaF)
-
-% Find intersections with |pi*b/(4*c)|
-GaFss = ss(GaF);
-JaF = arrayfun(@(w) lprsmatr(GaFss.A, GaFss.B, GaFss.C, w), w); % Complex - LPRS of G(w)
-imJaF = imag(JaF);
-
-icbelowaF = find(1 == conv(imJaF > -pi*b/(4*c), [1 -1], 'same')); % Index - Crossings below -> above (index of below)
-cbelowaF = size(icbelowaF, 2); % Nº of crossings below
-
-% Find the index of the minimum limit stable frequency (first value from 0)
-[wSaF, iwSaF] = FindOrbitalStabilityLimit(GaFss.A, GaFss.B, GaFss.C, w); % First w to be stable
-
-fprintf('\nLimit frequency(s) for stability:\n')
-for wi = w(iwSaF)
-    fprintf('    w = %f (kn = %f, f = %.2f Hz)\n', wi, ComputeKn(GaFss.A, GaFss.B, GaFss.C, wi), wi/(2*pi))
+% Implements the same TF as compensator 3 (but more restricted)
+% Implements: Gc4 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+function out = GcOptimComp4(coefs, G) % coefs = [wo, Q, tau]
+    global wg
+    Gc = tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
+    Ga = G + Gc;
+    out = real([pole(Ga); zero(Ga)]);
 end
-fprintf('\nFirst system equilibrium frequency:\n')
-FindWnPrecise(GaFss.A, GaFss.B, GaFss.C, b, c, wSaF);
 
-figure;
+coefs4 = [1, 0.707, 0.1];
+coefs4 = FindCompensator(@(x)max(GcOptimComp4(x, G)), coefs4, [eps eps eps], [wg inf inf])
 
-%Plot J
-subplot(2, 1, 1), plot(real(JaF), imJaF);
-title("LPRS plot (Amplified filtered plant)"), xlabel("Re J(w)"), ylabel("Im J(w)");
-yline(-pi*b/(4*c), 'r');
-legend(["J(w)", "-pi*b/(4*c)"]);
+Gc4 = tf([1 0 wg^2], [1 coefs4(1)/coefs4(2) coefs4(1)^2])*tf(1, [coefs4(3) 1]);
+Ga4 = G + Gc4;
 
-%Plot Im J vs w
-JSaF = [false([1, iwSaF-1]) true([1, length(w)-(iwSaF-1)])]; % Stability mask for w (1 stable, 0 not)
+CheckTF(Gc4, 'Gc4', true, true);
+CheckTF(Ga4, 'Ga4', true, true);
 
-subplot(2, 1, 2), plot(w(JSaF), imJaF(JSaF), w(~JSaF), imJaF(~JSaF));
-%title(sprintf("Im J(w) crossing with |pi*b/(4*c)|: %d above and %d below", sum(cabove), sum(cbelow))), xlabel("w"), ylabel("Im J(w)");
-title(sprintf("Im J(w) crossing with -pi*b/(4*c): %d", cbelowaF)), xlabel("w"), ylabel("Im J(w)");
-%yline(pi*b/(4*c).*[1 -1], 'r');
-yline(-pi*b/(4*c), 'r');
-legend(["Im J(w) Stable", "Im J(w) Unstable", "-pi*b/(4*c)"]);
-axis([0, 1e6, -1.5, pi*b/(4*c)*10]);
-
-%b = -imag(lprsmatr(GaFss.A, GaFss.B, GaFss.C, 238875))*4*c/pi;
-return
-
-%%
-figure, bode(tf([1 0], [wg 1])), xline(wg);
-figure, bode(tf([wg^2 0 0], [wg^2 2*1*wg 1])), xline(wg);
-%%
-wf = wg * 100;
-Rtf = tf(wg, [1 0 wg^2]) + tf(1, [1 0]);
-figure, impulse(Rtf), title("Sinusoid");
-figure, impulse(Rtf*tf([wf 0], [wf 1])), title("1st Order");
-figure, impulse(Rtf*tf([wf^2 0 0], [wf^2 2*1*wf 1])), title("2nd Order")
+CheckLPRS(Ga4, 'Ga4', warr, c, b, lprsverbose, lprsplots);

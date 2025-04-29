@@ -1,5 +1,6 @@
 function IsStable = TestOrbitalStability(A, B, C, w)
-% Test whether system is locally orbitally asymptotically stable as described in LPRS, p26
+% TESTORBITALSTABILITY [IsStable] - Check stability
+%   Test whether system is locally orbitally asymptotically stable as described in LPRS, p26
 
     T = 2*pi/w; % Orbital period
     eath = exp(A*T/2); % Precompute e^(A*T/2) for reuse
