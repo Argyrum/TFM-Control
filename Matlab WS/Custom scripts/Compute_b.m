@@ -1,5 +1,5 @@
-function [b, isStable, Kn] = Compute_b(A, B, C, c, wn, verbose)
-% COMPUTE_B [b, isStable, Kn] Compute relay hysteresys for equilibrium
+function [b, isStable, Kn, Jn] = Compute_b(A, B, C, c, wn, verbose)
+% COMPUTE_B [b, isStable, Kn, Jn] - Compute relay hysteresys for equilibrium
 %   Inverse of FindWnPrecise
 
     arguments

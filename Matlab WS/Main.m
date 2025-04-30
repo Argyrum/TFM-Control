@@ -18,17 +18,17 @@ fg = 50; % Hz - Reference frequency
 vr = 230; % V - Reference RMS voltage
 
 % Filter - Calculator http://sim.okawa-denshi.jp/en/RLCtool.php
-fs = 50e3; % Hz - Switching frequency
+fs = 150e3; % Hz - Switching frequency
 Lf = 22e-6; % H - Filter inductance
-Cf = 470e-6; % F - Filter capacitance
+Cf = 150e-6; % F - Filter capacitance
 Rf = 37e-3; % Ohm - Filter inductor resistance
 
 % TFs
 tfverbose = true;
-tfplots = true;
+tfplots = false;
 
 % LPRS
-fm = 500e3; % Hz - Maximum evaluated switching frequency
+fm = 1e6; % Hz - Maximum evaluated switching frequency
 b = 0.1; % V - Relay hysteresis amplitude, 0 to disable analysis
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
 lprsverbose = true; % Whether to print to console LPRS check verbose results
@@ -57,158 +57,94 @@ farr = 0:2:fm; % Hz - Evaluate LPRS for frequencies 0 to fm Hz
 warr = farr*2*pi; % Rad/s - Angular frequency equivalent
 
 %% Compute LPRS for base plant G
-[wS, iwS, KnS, bS] = CheckLPRS(G, 'G', warr, c, b, lprsverbose, lprsplots);
+[wS, iwS, KnS, bS] = CheckLPRS(G, 'G', warr, c, fs, lprsverbose, lprsplots);
 
 %% Compute PFC (Check ASPRness)
 
 wg = 2*pi*fg; % Grid (reference) angular frequency
 
 % Parallel (Ga = G + Gc)
-% Hard requirement: Ga rd = 1, minimum phase
-% since Ga = (nG*dGc + nGc*dG) / (dG*dGc)
-% rd Ga = ord(dG*dGc) - max{ord(nG*dGc), ord(nGc*dG)} | ord(dG) = 2, ord(nG) = 0
-% 1 = 2 + ord(dGc) - max{ord(dGc), 2 + ord(nGc)}
-% 1 + ord(dGc) = max{ord(dGc), 2 + ord(nGc)}
-% 1 = max{0, 2 + ord(nGc) - ord(dGc)}
-% 1 = max{0, 2 - rd(Gc)}
-% 1 = 2 - rd(Gc)
-% rd(Gc) = 1
-% Hard requirement: Gc rd = 1
+% Hard requirement: Gc rd = 1 (so Ga rd = 1)
 % Hard requirement: Ga minimum phase
-% Optimal: We want Ga -> G for f <= 50Hz
+% Optimal: We want Ga -> G for f = fg
 %   Option 1: Gc(50Hz)=0 should have a zero at f = 50 Hz
 %   Option 2: Gc(<=50Hz)=0 should be high pass for f >= 50 Hz
 
-% Optimization, fmincon, fminsearch
 % Option 1: Gc(w)=0 -> Gc(w) = (s^2 + w^2)
-% Since Gc must be rd 1 or 0: Gc = k * (s^2 + w^2) / (a1*s^3 + a2*s^2 + a3*s + 1)
-
-% Filter realizations:
-% https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf
-% https://sound-au.com/articles/notch-filters.htm
-% https://sound-au.com/articles/active-filters.htm
+% Since Gc must be rd 1 or 0: Gc = k * (s^2 + w^2) / (s^3 + a2*s^2 + a1*s + a0)
+% Gc implementable as notch filter + low-pass pole
 
 % Twin T notch calculators
 % http://sim.okawa-denshi.jp/en/TwinTCRkeisan.htm
 
-%% Compensator 1: passive Twin T notch
+% Single pole low-pass RC calculator
+% http://sim.okawa-denshi.jp/en/CRtool.php
+
+% Parameters
+tau = 7.5e-6;
+Q = 1.5;
+H = 5;
+
+%% Compensator 1: Twin T notch
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 
-fprintf('\n-- Compensator 1: Passive Twin T notch + LP pole --\n');
+fprintf('\n-- Compensator 1: Twin T notch + LP pole --\n');
 
 % Implements: Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [tau 1]);
-function out = GcOptimComp1(coefs, G) % coefs = [tau]
-    global wg
-    Gc = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs(1) 1]);
-    Ga = G + Gc;
-    out = real([max(pole(Ga)); max(zero(Ga))]);
-end
-
-coefs1 = 2e-3;
-coefs1 = FindCompensator(@(x)GcOptimComp1(x, G), coefs1, 0, 1e-5)
+coefs1 = tau; % [tau]
 
 Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs1(1) 1]);
 Ga1 = G + Gc1;
 
-%CheckTF(Gc1, 'Gc1', true, true);
-CheckTF(Ga1, 'Ga1', true, true);
+CheckTF(Gc1, 'Gc1', tfverbose, tfplots);
+CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
 
-CheckLPRS(Ga1, 'Ga1', warr, c, b, lprsverbose, lprsplots);
-return
-%% Compensator 2: active Twin T notch
+CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
+
+%% Compensator 2: Twin T notch w/ feedback
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 
-fprintf('\n-- Compensator 2: Active Twin T notch + LP pole --\n');
+fprintf('\n-- Compensator 2: Twin T notch w/ feedback + LP pole --\n');
 
 % Implements: Gc2 = tf([1 0 wg^2], [1 wg/Q wg^2])*tf(1, [tau 1]);
-function out = GcOptimComp2(coefs, G) % coefs = [Q, tau]
-    global wg
-    Gc = tf([1 0 wg^2], [1 wg/coefs(1) wg^2])*tf(1, [coefs(2) 1]);
-    Ga = G + Gc;
-    out = real([pole(Ga); zero(Ga)]);
-end
+coefs2 = [tau Q]; %  [tau, Q]
 
-coefs2 = [10 1];
-coefs2 = FindCompensator(@(x)max(GcOptimComp2(x, G)), coefs2, [-inf eps])
-
-Gc2 = tf([1 0 wg^2], [1 wg/coefs2(1) wg^2])*tf(1, [coefs2(2) 1]);
+Gc2 = tf([1 0 wg^2], [1 wg/coefs2(2) wg^2])*tf(1, [coefs2(1) 1]);
 Ga2 = G + Gc2;
 
-CheckTF(Gc2, 'Gc2', true, true);
-%CheckTF(Ga2, 'Ga2', true, true);
+CheckTF(Gc2, 'Gc2', tfverbose, tfplots);
+CheckTF(Ga2, 'Ga2', tfverbose, tfplots);
 
-% Solution not fit for LPRS calculations
-%CheckLPRS(Ga2, 'Ga2', warr, c, b, lprsverbose, lprsplots);
+CheckLPRS(Ga2, 'Ga2', warr, c, fs, lprsverbose, lprsplots);
 
-%% Compensator 3: active Bainter notch
+%% Compensator 3: Bainter notch
 % Bainter notch is rd = 0, add LP single pole for rd = 1
 
-fprintf('\n-- Compensator 3: Active Bainter notch + LP pole --\n');
+fprintf('\n-- Compensator 3: Bainter notch + LP pole --\n');
 
-% Gc3 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-function out = GcOptimComp3(coefs, G) % coefs = [wo, Q, tau]
-    global wg
-    Gc = tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
-    Ga = G + Gc;
-    out = real([pole(Ga); zero(Ga)]);
-end
+% Gc3 = H*tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+coefs3 = [tau, Q, 5]; % [tau, Q, H]
 
-coefs3 = [100, 0.707, 0.5];
-coefs3 = FindCompensator(@(x)max(GcOptimComp3(x, G)), coefs3, [eps eps eps])
-
-Gc3 = tf([1 0 wg^2], [1 coefs3(1)/coefs3(2) coefs3(1)^2])*tf(1, [coefs3(3) 1]);
+Gc3 = coefs3(3)*tf([1 0 wg^2], [1 wg/coefs3(2) wg^2])*tf(1, [coefs3(1) 1]);
 Ga3 = G + Gc3;
 
-CheckTF(Gc3, 'Gc3', true, true);
-CheckTF(Ga3, 'Ga3', true, true);
+CheckTF(Gc3, 'Gc3', tfverbose, tfplots);
+CheckTF(Ga3, 'Ga3', tfverbose, tfplots);
 
-CheckLPRS(Ga3, 'Ga3', warr, c, b, lprsverbose, lprsplots);
+CheckLPRS(Ga3, 'Ga3', warr, c, fs, lprsverbose, lprsplots);
 
-%% Compensator 3.2: active Bainter notch
-% Bainter notch is rd = 0, add LP single pole for rd = 1
-
-fprintf('\n-- Compensator 3.2: Active Bainter notch + LP pole --\n');
-
-% Gc3.2 = H*tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-function out = GcOptimComp32(coefs, G) % coefs = [wo, Q, tau, H]
-    global wg
-    Gc = coefs(4)*tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
-    Ga = G + Gc;
-    out = real([pole(Ga); zero(Ga)]);
-end
-
-coefs32 = [100, 0.5, 0.5, 1];
-coefs32 = FindCompensator(@(x)max(GcOptimComp32(x, G)), coefs32, [eps eps eps eps])
-
-Gc32 = coefs32(4)*tf([1 0 wg^2], [1 coefs32(1)/coefs32(2) coefs32(1)^2])*tf(1, [coefs32(3) 1]);
-Ga32 = G + Gc32;
-
-CheckTF(Gc32, 'Gc32', true, true);
-CheckTF(Ga32, 'Ga32', true, true);
-
-CheckLPRS(Ga32, 'Ga32', warr, c, b, lprsverbose, lprsplots);
-
-%% Compensator 4: active Boctor notch
+%% Compensator 4: Boctor notch
 % Boctor notch is rd = 0, add LP single pole for rd = 1
 
-fprintf('\n-- Compensator 4: Active Boctor notch + LP pole --\n');
+fprintf('\n-- Compensator 4: Boctor notch + LP pole --\n');
 
-% Implements the same TF as compensator 3 (but more restricted)
 % Implements: Gc4 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-function out = GcOptimComp4(coefs, G) % coefs = [wo, Q, tau]
-    global wg
-    Gc = tf([1 0 wg^2], [1 coefs(1)/coefs(2) coefs(1)^2])*tf(1, [coefs(3) 1]);
-    Ga = G + Gc;
-    out = real([pole(Ga); zero(Ga)]);
-end
+coefs4 = [tau, Q, wg/2]; % [tau, Q, wo]
 
-coefs4 = [1, 0.707, 0.1];
-coefs4 = FindCompensator(@(x)max(GcOptimComp4(x, G)), coefs4, [eps eps eps], [wg inf inf])
-
-Gc4 = tf([1 0 wg^2], [1 coefs4(1)/coefs4(2) coefs4(1)^2])*tf(1, [coefs4(3) 1]);
+Gc4 = tf([1 0 wg^2], [1 coefs4(3)/coefs4(2) coefs4(3)^2])*tf(1, [coefs4(1) 1]);
 Ga4 = G + Gc4;
 
-CheckTF(Gc4, 'Gc4', true, true);
-CheckTF(Ga4, 'Ga4', true, true);
+CheckTF(Gc4, 'Gc4', tfverbose, tfplots);
+CheckTF(Ga4, 'Ga4', tfverbose, tfplots);
 
-CheckLPRS(Ga4, 'Ga4', warr, c, b, lprsverbose, lprsplots);
+CheckLPRS(Ga4, 'Ga4', warr, c, fs, lprsverbose, lprsplots);

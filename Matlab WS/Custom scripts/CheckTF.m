@@ -9,10 +9,36 @@ function CheckTF(TF, name, verbose, plots)
 
     % Analyse plant
     if verbose
+        TFpoles = pole(TF);
+        TFzeros = zero(TF);
+        TFrd = length(TFpoles) - length(TFzeros);
+
         fprintf('\nZeros in %s:\n', name);
-        disp(zero(TF));
+        disp(TFzeros);
         fprintf('\nPoles in %s:\n', name);
-        disp(pole(TF));
+        disp(TFpoles);
+
+        if max(real(TFzeros)) < 0
+            disp("OK: Is minimum phase");
+        else
+            disp("WARN: Is not minimum phase");
+        end
+
+        if max(real(TFpoles)) < 0
+            disp("OK: Is stable");
+        else
+            disp("ERROR: Is not stable");
+        end
+
+        if TFrd > 1
+            disp("WARN: Is strict proper (rd > 1)");
+        elseif TFrd == 1
+            disp("OK: Is strict proper (rd = 1)");
+        elseif TFrd == 0
+            disp("WARN: Is proper (rd = 0)");
+        else
+            disp("ERROR: Is not causal (rd < 0)");
+        end
     end
     
     %% Plot plant
