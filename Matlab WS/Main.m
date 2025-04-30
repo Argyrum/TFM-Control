@@ -99,8 +99,8 @@ Ga1 = G + Gc1;
 CheckTF(Gc1, 'Gc1', tfverbose, tfplots);
 CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
 
-CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
-
+[~, ~, ~, ~, bE, KnE] = CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
+return
 %% Compensator 2: Twin T notch w/ feedback
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 

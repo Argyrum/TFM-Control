@@ -1,5 +1,5 @@
 function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, plots)
-%CHECKLPRS [wS, iwS, KnS, bS, wE, KnE] - Check stability and equilibrium
+%CHECKLPRS [wS, iwS, KnS, bS, bE, KnE] - Check stability and equilibrium
 %   Detailed explanation goes here
 
     arguments
