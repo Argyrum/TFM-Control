@@ -22,7 +22,7 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
     JSMask = TestOrbitalStability(Gss.A, Gss.B, Gss.C, wArr);
     JSLimitsStartMask = find(conv(JSMask, [1 -1]) == 1);
     JSLimitsEndMask = find(conv(JSMask, [1 -1]) == -1);
-    JSLimitsEndMask = JSLimitsEndMask - 1; % Offset 1 forwards to compensate for padding
+    JSLimitsEndMask = JSLimitsEndMask(1:end-1) - 1; % Offset 1 forwards and discard last value to compensate for conv padding
 
     we = 2*pi*fe;
 
@@ -31,7 +31,9 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         for i=1:length(JSLimitsStartMask)
             fprintf('- Stability band %i -\n', i);
             Compute_b(Gss.A, Gss.B, Gss.C, c, wArr(JSLimitsStartMask(i)), true); % Find b and gain at stability limit
-            Compute_b(Gss.A, Gss.B, Gss.C, c, wArr(JSLimitsEndMask(i)), true); % Find b and gain at stability limit
+            if i <= length(JSLimitsEndMask)
+                Compute_b(Gss.A, Gss.B, Gss.C, c, wArr(JSLimitsEndMask(i)), true); % Find b and gain at stability limit
+            end
         end
     end
 
@@ -62,7 +64,7 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         plot(real(J), imJ);
         title("J(w)"), xlabel("Re J(w)"), ylabel("Im J(w)");
         if (c ~= 0) && (bE ~= 0)
-            yline(-pi*bE/(4*c), "--");
+            yline(-pi*bE/(4*c), "--", "LineWidth", 2);
             legend(["", "-pi*b/(4*c)"]);
         else
         end
@@ -71,15 +73,26 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         %Plot Im J vs w        
         subplot(2, 1, 2), hold on;
         plot(wArr(JSMask), imJ(JSMask), ".", wArr(~JSMask), imJ(~JSMask), ".");
-        plot(wArr(JSLimitsStartMask), imJ(JSLimitsStartMask), "diamond")
-        plot(wArr(JSLimitsEndMask), imJ(JSLimitsEndMask), "square");
+        plot(wArr(JSLimitsStartMask), imJ(JSLimitsStartMask), "diamond", "LineWidth", 2)
+        plot(wArr(JSLimitsEndMask), imJ(JSLimitsEndMask), "square", "LineWidth", 2);
         title("Im J(w)"), xlabel("w"), ylabel("Im J(w)");
         if (c ~= 0) && (bE ~= 0)
-            yline(-pi*bE/(4*c), ":");
-            plot(we, imag(JE), "o")
-            legend(["Stable", "Unstable", "Stabilization", "Destabilization", "-pi*bE/(4*c)", "we"]);
+            yline(-pi*bE/(4*c), ":", "LineWidth", 2);
+            plot(we, imag(JE), "o", "LineWidth", 2)
+        end
+        
+        if (c ~= 0) && (bE ~= 0)
+            if isempty(JSLimitsEndMask)
+                legend(["Stable", "Unstable", "Stabilization", "-pi*bE/(4*c)", "we"]);
+            else
+                legend(["Stable", "Unstable", "Stabilization", "Destabilization", "-pi*bE/(4*c)", "we"]);
+            end
         else
-            legend(["Stable", "Unstable", "Stabilization", "Destabilization"]);
+            if isempty(JSLimitsEndMask)
+                legend(["Stable", "Unstable", "Stabilization", "Destabilization"]);
+            else
+                legend(["Stable", "Unstable", "Stabilization"]);
+            end
         end
         xscale log;
         hold off;

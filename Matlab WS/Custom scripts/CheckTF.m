@@ -39,6 +39,12 @@ function CheckTF(TF, name, verbose, plots)
         else
             disp("ERROR: Is not causal (rd < 0)");
         end
+
+        if TFrd == 1 && max(real(TFzeros)) < 0
+            disp("OK: Is ASPR");
+        else
+            disp("WARN: Is not ASPR");
+        end
     end
     
     %% Plot plant
