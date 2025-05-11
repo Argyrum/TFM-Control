@@ -61,39 +61,30 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         
         %Plot J
         subplot(2, 1, 1), hold on;
-        plot(real(J), imJ);
+        plot(real(J), imJ, 'DisplayName', 'J(w)');
         title("J(w)"), xlabel("Re J(w)"), ylabel("Im J(w)");
         if (c ~= 0) && (bE ~= 0)
-            yline(-pi*bE/(4*c), "--", "LineWidth", 2);
-            legend(["", "-pi*b/(4*c)"]);
-        else
+            yline(-pi*bE/(4*c), "--", "LineWidth", 2, 'DisplayName', '-pi*b/(4*c)');
+            legend();
         end
         hold off;
         
         %Plot Im J vs w        
         subplot(2, 1, 2), hold on;
-        plot(wArr(JSMask), imJ(JSMask), ".", wArr(~JSMask), imJ(~JSMask), ".");
-        plot(wArr(JSLimitsStartMask), imJ(JSLimitsStartMask), "diamond", "LineWidth", 2)
-        plot(wArr(JSLimitsEndMask), imJ(JSLimitsEndMask), "square", "LineWidth", 2);
+        plot(wArr(JSMask), imJ(JSMask), ".", 'DisplayName', 'Stable');
+        plot(wArr(~JSMask), imJ(~JSMask), ".", 'DisplayName', 'Unstable');
+        plot(wArr(JSLimitsStartMask), imJ(JSLimitsStartMask), "diamond", "LineWidth", 2, 'DisplayName', 'Stabilization');
+        if ~isempty(JSLimitsEndMask)
+            plot(wArr(JSLimitsEndMask), imJ(JSLimitsEndMask), "square", "LineWidth", 2, 'DisplayName', 'Destabilization');
+        end
+        if (c ~= 0) && (bE ~= 0)
+            yline(-pi*bE/(4*c), ":", "LineWidth", 2, 'DisplayName', '-pi*bE/(4*c)');
+            plot(we, imag(JE), "o", "LineWidth", 2, 'DisplayName', 'we')
+        end
+
         title("Im J(w)"), xlabel("w"), ylabel("Im J(w)");
-        if (c ~= 0) && (bE ~= 0)
-            yline(-pi*bE/(4*c), ":", "LineWidth", 2);
-            plot(we, imag(JE), "o", "LineWidth", 2)
-        end
+        legend();    
         
-        if (c ~= 0) && (bE ~= 0)
-            if isempty(JSLimitsEndMask)
-                legend(["Stable", "Unstable", "Stabilization", "-pi*bE/(4*c)", "we"]);
-            else
-                legend(["Stable", "Unstable", "Stabilization", "Destabilization", "-pi*bE/(4*c)", "we"]);
-            end
-        else
-            if isempty(JSLimitsEndMask)
-                legend(["Stable", "Unstable", "Stabilization", "Destabilization"]);
-            else
-                legend(["Stable", "Unstable", "Stabilization"]);
-            end
-        end
         xscale log;
         hold off;
 

@@ -1,3 +1,9 @@
+% 1. Create model of the plant
+% 2. Design a PFC
+% 3. Implement PFC
+% 4. Implement SSR
+% 5. Implement error amplifier
+
 %% Clean environment
 close all;
 clear variables;
@@ -15,7 +21,7 @@ E = 400; % V - DC supply voltage
 
 % Reference (Output to grid)
 fg = 50; % Hz - Reference frequency
-vr = 230; % V - Reference RMS voltage
+Vg = 230*sqrt(2); % V - Reference maximum voltage
 
 % Filter - Calculator http://sim.okawa-denshi.jp/en/RLCtool.php
 fs = 150e3; % Hz - Switching frequency
@@ -24,15 +30,18 @@ Cf = 150e-6; % F - Filter capacitance
 Rf = 37e-3; % Ohm - Filter inductor resistance
 
 % TFs
-tfverbose = true;
+tfverbose = false;
 tfplots = false;
 
 % LPRS
-fm = 1e6; % Hz - Maximum evaluated switching frequency
-b = 0.1; % V - Relay hysteresis amplitude, 0 to disable analysis
+fm = 5e5; % Hz - Maximum evaluated switching frequency
+fmstep = 2; % Hz - Evaluated switching frequency step
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
-lprsverbose = true; % Whether to print to console LPRS check verbose results
-lprsplots = true; % Whether to plot LPRS check results
+lprsverbose = false; % Whether to print to console LPRS check verbose results
+lprsplots = false; % Whether to plot LPRS check results
+
+% Implementation
+Vc = 12; % V - OpAmp maximum output voltage
 
 %% Compute Low Pass LC filter component values
 % wc^2/(s^2 + 2chi wc + wc^2), LC = 1/(wc)^2, RC = 1/(2chi wc) = Q/wc
@@ -42,9 +51,13 @@ fc = sqrt(fg*fs); % Hz - Cut-off frequency
 
 % Compute optimal C (fc = 1/(2*pi*sqrt(L*C)))
 Cfo = 1/(Lf*(2*pi*fc)^2); % F - Optimal filter capacitance
+fprintf('\nCf offset: %f F\n', Cf-Cfo);
 
 % Compute R to avoid resonance (Rfo = Q/(C*wc) for Q = 0.707)
 Rfo = 0.707*sqrt(Lf*Cf)/Cf;
+fprintf('\nRf offset: %f Ohm\n', Rf-Rfo);
+
+clear fc Rfo Cfo
 
 %% Compute plant
 G = tf(E, [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from u
@@ -53,11 +66,13 @@ Zo = -tf([Lf, Rf], [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from Io
 CheckTF(G, 'G', tfverbose, tfplots);
 
 %% Set up LPRS
-farr = 0:2:fm; % Hz - Evaluate LPRS for frequencies 0 to fm Hz
+farr = 0:fmstep:fm; % Hz - Evaluate LPRS for frequencies 0 to fm Hz
 warr = farr*2*pi; % Rad/s - Angular frequency equivalent
 
+clear fm fmstep farr
+
 %% Compute LPRS for base plant G
-[wS, iwS, KnS, bS] = CheckLPRS(G, 'G', warr, c, fs, lprsverbose, lprsplots);
+[~, ~, KnS, bS] = CheckLPRS(G, 'G', warr, c, fs, lprsverbose, lprsplots);
 
 %% Compute PFC (Check ASPRness)
 
@@ -73,12 +88,6 @@ wg = 2*pi*fg; % Grid (reference) angular frequency
 % Option 1: Gc(w)=0 -> Gc(w) = (s^2 + w^2)
 % Since Gc must be rd 1 or 0: Gc = k * (s^2 + w^2) / (s^3 + a2*s^2 + a1*s + a0)
 % Gc implementable as notch filter + low-pass pole
-
-% Twin T notch calculators
-% http://sim.okawa-denshi.jp/en/TwinTCRkeisan.htm
-
-% Single pole low-pass RC calculator
-% http://sim.okawa-denshi.jp/en/CRtool.php
 
 % Parameters
 tau = 7.5e-6;
@@ -101,6 +110,8 @@ CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
 
 [~, ~, ~, ~, bE, KnE] = CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
 
+clear coefs1
+
 %% Compensator 2: Twin T notch w/ feedback
 % Twin T notch is rd = 0, add LP single pole for rd = 1
 
@@ -116,6 +127,8 @@ CheckTF(Gc2, 'Gc2', tfverbose, tfplots);
 CheckTF(Ga2, 'Ga2', tfverbose, tfplots);
 
 CheckLPRS(Ga2, 'Ga2', warr, c, fs, lprsverbose, lprsplots);
+
+clear coefs2
 
 %% Compensator 3: Bainter notch
 % Bainter notch is rd = 0, add LP single pole for rd = 1
@@ -133,6 +146,8 @@ CheckTF(Ga3, 'Ga3', tfverbose, tfplots);
 
 CheckLPRS(Ga3, 'Ga3', warr, c, fs, lprsverbose, lprsplots);
 
+clear coefs3
+
 %% Compensator 4: Boctor notch
 % Boctor notch is rd = 0, add LP single pole for rd = 1
 
@@ -149,8 +164,12 @@ CheckTF(Ga4, 'Ga4', tfverbose, tfplots);
 
 CheckLPRS(Ga4, 'Ga4', warr, c, fs, lprsverbose, lprsplots);
 
+clear coefs4
+
 %% Compensator implementation
 % Compensator 1 chosen
+% Twin T notch - http://sim.okawa-denshi.jp/en/TwinTCRkeisan.htm
+% RC low-pass - http://sim.okawa-denshi.jp/en/CRtool.php
 
 Rc1 = 47e3;
 Rc2 = 47e3;
@@ -173,29 +192,31 @@ figure, hold on;
 bode(Gc1, Gc), xline(wg);
 title("Compensator realization"), legend(["Designed", "Realization", "50 Hz"]);
 
+clear Rc Cc
+
+%% Cleanup compensator design stage
+clear tau Q H
+
 %% Relay realization
 % Schmitt trigger
 
-% bE/Vst = Rst1/Rst2
+% bE/Vc = Rst1/Rst2
 Rst1 = 1e3; % Ohm
 Rst2 = 56e3; % Ohm
 
-Vc = 12; % V - c in volts
-
-fprintf('\n Relay hysteresis offset: %f mV\n', 1e3*(Vc*Rst1/Rst2-bE));
+fprintf('\nRelay hysteresis offset : %.2f mV (actual %.2f)\n', 1e3*(Vc*Rst1/Rst2-bE), bE*1e3);
+fprintf('\nRst2 needed offset: %.f Ohm (%.f)\n', Rst2-Vc*Rst1/bE, Rst2);
 
 %% Error calculation
 % Inverting summing amplifier
 
-Rin1 = 27e3; % Ohm
-Rin2 = 27e3; % Ohm
-Rin3 = 12e3; % Ohm
+% Vout = -sum(Vin*Rout/Rin)
+Rin1 = 27e3; % Ohm - Output feedback
+Rin2 = 27e3; % Ohm - Reference
+Rin3 = 12e3; % Ohm - Compensator feedback
+
 Rout = 1e3; % Ohm
 
-fprintf('\n Rin1 offset: %f Ohm\n', Rout*sqrt(2)*vr/Vc-Rin1);
-fprintf('\n Rin2 offset: %f Ohm\n', Rout*(vr*sqrt(2))/Vc-Rin2);
-fprintf('\n Rin3 offset: %f Ohm\n', Rout*12-Rin3);
-
-%% Response analysis
-
-% Run response through thd() to see distortion
+fprintf('\nRin1 needed offset: %.f Ohm (actual %.f)\n', Rin1-Rout*Vg/Vc, Rin1);
+fprintf('\nRin2 needed offset: %.f Ohm (actual %.f)\n', Rin2-Rout*Vg/Vc, Rin2);
+fprintf('\nRin3 needed offset: %.f Ohm (actual %.f)\n', Rin3-Rout*Vc, Rin3);
