@@ -28,10 +28,10 @@ outDec = 10; % Decimation factor for simulation out values
 
 %% Load simulation results (skip execution)
 
-load Data\OutDemoSim.mat
+%load Data\OutDemoSim.mat
 
-%sys = "CLRFSPFCRealizedSimscape";
-%load_system(sys);
+sys = "CLRFSPFCRealizedSimscape";
+open_system(sys);
 %close_system;
 
 %% Response analysis

@@ -30,15 +30,15 @@ Cf = 150e-6; % F - Filter capacitance
 Rf = 37e-3; % Ohm - Filter inductor resistance
 
 % TFs
-tfverbose = false;
-tfplots = false;
+tfverbose = true;
+tfplots = true;
 
 % LPRS
-fm = 5e5; % Hz - Maximum evaluated switching frequency
+fm = 1e6; % Hz - Maximum evaluated switching frequency
 fmstep = 2; % Hz - Evaluated switching frequency step
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
-lprsverbose = false; % Whether to print to console LPRS check verbose results
-lprsplots = false; % Whether to plot LPRS check results
+lprsverbose = true; % Whether to print to console LPRS check verbose results
+lprsplots = true; % Whether to plot LPRS check results
 
 % Implementation
 Vc = 12; % V - OpAmp maximum output voltage

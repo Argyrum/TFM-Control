@@ -14,6 +14,10 @@ load_system("Simulink models\CLRFSPFCRealizedSimscape.slx");
 Simulink.exportToVersion("CLRFSPFCRealizedSimscape", "Simulink models\exported\CLRFSPFCRealizedSimscape_2022.slx", "R2022a");
 close_system
 
+load_system("Simulink models\CLRFSPFCRealizedSimscapeNew.slx");
+Simulink.exportToVersion("CLRFSPFCRealizedSimscapeNew", "Simulink models\exported\CLRFSPFCRealizedSimscapeNew_2022.slx", "R2022a");
+close_system
+
 load_system("Simulink models\GcFilterTest.slx");
 Simulink.exportToVersion("GcFilterTest", "Simulink models\exported\GcFilterTest_2022.slx", "R2022a");
 close_system
@@ -28,4 +32,8 @@ close_system
 
 load_system("Simulink models\SumSimscapeTest.slx");
 Simulink.exportToVersion("SumSimscapeTest", "Simulink models\exported\SumSimscapeTest_2022.slx", "R2022a");
+close_system
+
+load_system("Simulink models\FilterTestSimscape.slx");
+Simulink.exportToVersion("FilterTestSimscape", "Simulink models\exported\FilterTestSimscape_2022.slx", "R2022a");
 close_system
