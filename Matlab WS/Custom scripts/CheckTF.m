@@ -18,32 +18,32 @@ function CheckTF(TF, name, verbose, plots)
         fprintf('\nPoles in %s:\n', name);
         disp(TFpoles);
 
-        if max(real(TFzeros)) < 0
-            disp("OK: Is minimum phase");
+        if max(real(TFpoles)) < 0
+            fprintf("\nOK: %s is stable\n", name);
         else
-            disp("WARN: Is not minimum phase");
+            fprintf("\nERROR: %s is not stable\n", name);
         end
 
-        if max(real(TFpoles)) < 0
-            disp("OK: Is stable");
+        if max(real(TFzeros)) < 0
+            fprintf("\nOK: %s is minimum phase\n", name);
         else
-            disp("ERROR: Is not stable");
+            fprintf("\nWARN: %s is not minimum phase\n", name);
         end
 
         if TFrd > 1
-            disp("WARN: Is strict proper (rd > 1)");
+            fprintf("\nWARN: %s is strict proper (rd > 1)\n", name);
         elseif TFrd == 1
-            disp("OK: Is strict proper (rd = 1)");
+            fprintf("\nOK: %s is strict proper (rd = 1)\n", name);
         elseif TFrd == 0
-            disp("WARN: Is proper (rd = 0)");
+            fprintf("\nWARN: %s is proper (rd = 0)\n", name);
         else
-            disp("ERROR: Is not causal (rd < 0)");
+            fprintf("\nERROR: %s is not causal (rd < 0)\n", name);
         end
 
         if TFrd == 1 && max(real(TFzeros)) < 0
-            disp("OK: Is ASPR");
+            fprintf("\nOK: %s is ASPR\n", name);
         else
-            disp("WARN: Is not ASPR");
+            fprintf("\nWARN: %s is not ASPR\n", name);
         end
     end
     
