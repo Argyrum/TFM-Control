@@ -37,22 +37,22 @@ LC = 1/(2*pi*fc)^2;
 Carr = 10*sqrt(LC./r);
 Larr = Carr.*r./100;
 
-clear LC fc
-
 % Plot results
 figure;
 tiledlayout('vertical');
 
 nexttile;
 hold on;
-semilogy(r, Larr, 'DisplayName', 'L');
-semilogy(r, Carr, 'DisplayName', 'C');
+semilogy(r, Larr, 'DisplayName', 'L (H)');
+semilogy(r, Carr, 'DisplayName', 'C (F)');
 hold off;
-title('LP component values');
+title('LP component values', sprintf('for fc = %.2f kHz', fc/1e3));
 xlabel('Ratio L/C (%)');
 legend;
 yscale log;
 grid on;
+
+clear LC fc
 
 %% Check b and kn values across pairs with LPRS (with G)
 barr = zeros(size(r));
@@ -75,7 +75,7 @@ end
 nexttile;
 hold on;
 yyaxis left;
-semilogy(r, barr, 'DisplayName', 'b');
+semilogy(r, barr, 'DisplayName', 'b (V)');
 yyaxis right;
 semilogy(r, karr, 'DisplayName', 'kn');
 hold off;
@@ -135,7 +135,7 @@ clear fm fmstep farr coefs
 nexttile;
 hold on;
 yyaxis left;
-semilogy(r, b2arr, 'DisplayName', 'b');
+semilogy(r, b2arr, 'DisplayName', 'b (V)');
 yyaxis right;
 semilogy(r, k2arr, 'DisplayName', 'kn');
 hold off;
