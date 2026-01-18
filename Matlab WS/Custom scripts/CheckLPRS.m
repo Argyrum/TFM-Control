@@ -15,7 +15,12 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
     %% Compute LPRS for base plant G
     % Compute J(w)
     Gss = ss(G);
-    J = arrayfun(@(w) lprsmatr(Gss.A, Gss.B, Gss.C, w), wArr); % Complex - LPRS of G(w)
+
+    J = zeros(size(wArr));
+    parfor idx = 1:size(wArr,2)
+        J(idx) = lprsmatr(Gss.A, Gss.B, Gss.C, wArr(idx)); % Complex - LPRS of G(w)
+    end
+
     imJ = imag(J);
 
     % Test stability and look for transitions
