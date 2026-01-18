@@ -84,7 +84,7 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         end
         if (c ~= 0) && (bE ~= 0)
             yline(-pi*bE/(4*c), ":", "LineWidth", 2, 'DisplayName', '-pi*bE/(4*c)');
-            plot(we, imag(JE), "o", "LineWidth", 2, 'DisplayName', 'we')
+            plot(we, imag(JE), "o", "LineWidth", 2, 'DisplayName', sprintf('we (%.0f kHz)', fe/1e3))
         end
 
         title("Im J(w)"), xlabel("w"), ylabel("Im J(w)");
