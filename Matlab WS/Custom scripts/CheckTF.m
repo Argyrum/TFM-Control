@@ -1,4 +1,4 @@
-function CheckTF(TF, name, verbose, plots)
+function [isStable, isMP, TFrd, isASPR] = CheckTF(TF, name, verbose, plots)
 %CHECKTF Calculate plant information
     arguments
         TF
@@ -8,23 +8,26 @@ function CheckTF(TF, name, verbose, plots)
     end
 
     % Analyse plant
-    if verbose
         TFpoles = pole(TF);
+        isStable = max(real(TFpoles)) < 0;
         TFzeros = zero(TF);
+        isMP = max(real(TFzeros)) < 0;
         TFrd = length(TFpoles) - length(TFzeros);
+        isASPR = TFrd == 1 && isMP;
 
+    if verbose
         fprintf('\nZeros in %s:\n', name);
         disp(TFzeros);
         fprintf('\nPoles in %s:\n', name);
         disp(TFpoles);
 
-        if max(real(TFpoles)) < 0
+        if isStable
             fprintf("\nOK: %s is stable\n", name);
         else
             fprintf("\nERROR: %s is not stable\n", name);
         end
 
-        if max(real(TFzeros)) < 0
+        if isMP
             fprintf("\nOK: %s is minimum phase\n", name);
         else
             fprintf("\nWARN: %s is not minimum phase\n", name);
@@ -40,7 +43,7 @@ function CheckTF(TF, name, verbose, plots)
             fprintf("\nERROR: %s is not causal (rd < 0)\n", name);
         end
 
-        if TFrd == 1 && max(real(TFzeros)) < 0
+        if isASPR
             fprintf("\nOK: %s is ASPR\n", name);
         else
             fprintf("\nWARN: %s is not ASPR\n", name);
