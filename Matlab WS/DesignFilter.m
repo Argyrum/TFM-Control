@@ -6,7 +6,7 @@ format shorte;
 
 %% Set up workspace path
 if ~contains(path,"LPRS")
-    addpath("Custom scripts\", "LPRS scripts\", "Simulink models\");
+    addpath("Custom scripts\", "LPRS scripts\");
 end
 
 %% Input parameters
@@ -29,11 +29,8 @@ c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
 % Generate possible filter ratios (r/100 = L/C)
 r = 1:100;
 
-% Compute the cut-off as the geometric mean of grid and switching freq.
-fc = sqrt(fg*fs); % Hz - Cut-off frequency
-
-% Compute possible L and C pairs (1/(2*pi*fc)^2 = L*C)
-LC = 1/(2*pi*fc)^2;
+% Compute possible L and C pairs (1/(2*pi*fc)^2 = L*C, fc = sqrt(fg*fs))
+LC = 1/(4*pi^2*fg*fs);
 Carr = 10*sqrt(LC./r);
 Larr = Carr.*r./100;
 
@@ -45,9 +42,23 @@ nexttile;
 hold on;
 semilogy(r, Larr, 'DisplayName', 'L (H)');
 semilogy(r, Carr, 'DisplayName', 'C (F)');
+
+% Ceramic caps
+% yline(1e-6, '--', 'Color', '#1171BE', 'DisplayName', 'WCAP-CSMH');
+% yline(470e-9, '--', 'Color', '#DD5400', 'DisplayName', 'WCAP-CSST');
+
+% Film caps
+% yline(3.3e-6, ':', 'Color', '#1171BE', 'DisplayName', 'WCAP-FTBP');
+% yline(75e-6, ':', 'Color', '#DD5400', 'DisplayName', 'WCAP-FTDB');
+
+% Coils
+% yline(62e-6, '-', 'Color', '#1171BE', 'DisplayName', 'WE-HCF THT');
+% yline(10e-6, '-', 'Color', '#DD5400', 'DisplayName', 'WE-HCF SMT');
+% yline(15e-6, '-', 'Color', '#EDB120', 'DisplayName', 'CC-SI SMT');
+
 hold off;
-title('LP component values', sprintf('for fc = %.2f kHz', fc/1e3));
-xlabel('Ratio L/C (%)');
+title('LP component values', sprintf('for LC = %.2i', LC));
+%xlabel('Ratio L/C (%)');
 legend;
 yscale log;
 grid on;
@@ -73,13 +84,13 @@ end
 
 % Plot results
 nexttile;
-hold on;
 yyaxis left;
 semilogy(r, barr, 'DisplayName', 'b (V)');
+yscale log;
 yyaxis right;
+%plot(r, karr, 'DisplayName', 'kn');
 semilogy(r, karr, 'DisplayName', 'kn');
-hold off;
-title('LPRS results for G(s)');
+subtitle('LPRS results for G(s)');
 xlabel('Ratio L/C (%)');
 legend;
 yscale log;
@@ -144,3 +155,6 @@ xlabel('Ratio L/C (%)');
 legend;
 yscale log;
 grid on;
+
+%%
+ExportPlot('DesignFilterPlot');
