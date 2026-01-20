@@ -25,20 +25,20 @@ Vg = 230*sqrt(2); % V - Reference maximum voltage
 
 % Filter - Calculator http://sim.okawa-denshi.jp/en/RLCtool.php
 fs = 150e3; % Hz - Switching frequency
-Lf = 22e-6; % H - Filter inductance
-Cf = 150e-6; % F - Filter capacitance
-Rf = 37e-3; % Ohm - Filter inductor resistance
+Lf = 37e-6; % H - Filter inductance
+Cf = 90e-6; % F - Filter capacitance
+Rf = 3.2e-3; % Ohm - Filter inductor resistance
 
 % TFs
 tfverbose = true;
-tfplots = true;
+tfplots = false;
 
 % LPRS
 fm = 1e6; % Hz - Maximum evaluated switching frequency
 fmstep = 2; % Hz - Evaluated switching frequency step
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
 lprsverbose = true; % Whether to print to console LPRS check verbose results
-lprsplots = true; % Whether to plot LPRS check results
+lprsplots = false; % Whether to plot LPRS check results
 
 % Implementation
 Vc = 12; % V - OpAmp maximum output voltage
@@ -54,10 +54,10 @@ Cfo = 1/(Lf*(2*pi*fc)^2); % F - Optimal filter capacitance
 fprintf('\nCf offset: %f F\n', Cf-Cfo);
 
 % Compute R to avoid resonance (Rfo = Q/(C*wc) for Q = 0.707)
-Rfo = 0.707*sqrt(Lf*Cf)/Cf;
+Rfo = 0.707*sqrt(Lf*Cf);
 fprintf('\nRf offset: %f Ohm\n', Rf-Rfo);
 
-clear fc Rfo Cfo
+clear fc
 
 %% Compute plant
 G = tf(E, [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from u
@@ -91,80 +91,84 @@ wg = 2*pi*fg; % Grid (reference) angular frequency
 
 % Parameters
 tau = 7.5e-6;
-Q = 1.5;
+Q = 1;
 H = 5;
 
 %% Compensator 1: Twin T notch
 % Twin T notch is rd = 0, add LP single pole for rd = 1
-
-fprintf('\n-- Compensator 1: Twin T notch + LP pole --\n');
-
-% Implements: Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [tau 1]);
-coefs1 = tau; % [tau]
-
-Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs1(1) 1]);
-Ga1 = G + Gc1;
-
-CheckTF(Gc1, 'Gc1', tfverbose, tfplots);
-CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
-
-[~, ~, ~, ~, bE, KnE] = CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
-
-clear coefs1
+if true
+    fprintf('\n-- Compensator 1: Twin T notch + LP pole --\n');
+    
+    % Implements: Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [tau 1]);
+    coefs1 = tau; % [tau]
+    
+    Gc1 = tf([1 0 wg^2], [1 4*wg wg^2])*tf(1, [coefs1(1) 1]);
+    Ga1 = G + Gc1;
+    
+    CheckTF(Gc1, 'Gc1', tfverbose, tfplots);
+    CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
+    
+    [~, ~, ~, ~, bE, KnE] = CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
+    
+    clear coefs1
+end
 
 %% Compensator 2: Twin T notch w/ feedback
 % Twin T notch is rd = 0, add LP single pole for rd = 1
-
-fprintf('\n-- Compensator 2: Twin T notch w/ feedback + LP pole --\n');
-
-% Implements: Gc2 = tf([1 0 wg^2], [1 wg/Q wg^2])*tf(1, [tau 1]);
-coefs2 = [tau Q]; %  [tau, Q]
-
-Gc2 = tf([1 0 wg^2], [1 wg/coefs2(2) wg^2])*tf(1, [coefs2(1) 1]);
-Ga2 = G + Gc2;
-
-CheckTF(Gc2, 'Gc2', tfverbose, tfplots);
-CheckTF(Ga2, 'Ga2', tfverbose, tfplots);
-
-CheckLPRS(Ga2, 'Ga2', warr, c, fs, lprsverbose, lprsplots);
-
-clear coefs2
+if false
+    fprintf('\n-- Compensator 2: Twin T notch w/ feedback + LP pole --\n');
+    
+    % Implements: Gc2 = tf([1 0 wg^2], [1 wg/Q wg^2])*tf(1, [tau 1]);
+    coefs2 = [tau Q]; %  [tau, Q]
+    
+    Gc2 = tf([1 0 wg^2], [1 wg/coefs2(2) wg^2])*tf(1, [coefs2(1) 1]);
+    Ga2 = G + Gc2;
+    
+    CheckTF(Gc2, 'Gc2', tfverbose, tfplots);
+    CheckTF(Ga2, 'Ga2', tfverbose, tfplots);
+    
+    CheckLPRS(Ga2, 'Ga2', warr, c, fs, lprsverbose, lprsplots);
+    
+    clear coefs2
+end
 
 %% Compensator 3: Bainter notch
 % Bainter notch is rd = 0, add LP single pole for rd = 1
-
-fprintf('\n-- Compensator 3: Bainter notch + LP pole --\n');
-
-% Gc3 = H*tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-coefs3 = [tau, Q, 5]; % [tau, Q, H]
-
-Gc3 = coefs3(3)*tf([1 0 wg^2], [1 wg/coefs3(2) wg^2])*tf(1, [coefs3(1) 1]);
-Ga3 = G + Gc3;
-
-CheckTF(Gc3, 'Gc3', tfverbose, tfplots);
-CheckTF(Ga3, 'Ga3', tfverbose, tfplots);
-
-CheckLPRS(Ga3, 'Ga3', warr, c, fs, lprsverbose, lprsplots);
-
-clear coefs3
+if true
+    fprintf('\n-- Compensator 3: Bainter notch + LP pole --\n');
+    
+    % Gc3 = H*tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+    coefs3 = [tau, Q, H]; % [tau, Q, H]
+    
+    Gc3 = coefs3(3)*tf([1 0 wg^2], [1 wg/coefs3(2) wg^2])*tf(1, [coefs3(1) 1]);
+    Ga3 = G + Gc3;
+    
+    CheckTF(Gc3, 'Gc3', tfverbose, tfplots);
+    CheckTF(Ga3, 'Ga3', tfverbose, tfplots);
+    
+    CheckLPRS(Ga3, 'Ga3', warr, c, fs, lprsverbose, lprsplots);
+    
+    clear coefs3
+end
 
 %% Compensator 4: Boctor notch
 % Boctor notch is rd = 0, add LP single pole for rd = 1
-
-fprintf('\n-- Compensator 4: Boctor notch + LP pole --\n');
-
-% Implements: Gc4 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-coefs4 = [tau, Q, wg/2]; % [tau, Q, wo]
-
-Gc4 = tf([1 0 wg^2], [1 coefs4(3)/coefs4(2) coefs4(3)^2])*tf(1, [coefs4(1) 1]);
-Ga4 = G + Gc4;
-
-CheckTF(Gc4, 'Gc4', tfverbose, tfplots);
-CheckTF(Ga4, 'Ga4', tfverbose, tfplots);
-
-CheckLPRS(Ga4, 'Ga4', warr, c, fs, lprsverbose, lprsplots);
-
-clear coefs4
+if false
+    fprintf('\n-- Compensator 4: Boctor notch + LP pole --\n');
+    
+    % Implements: Gc4 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
+    coefs4 = [tau, Q, wg/2]; % [tau, Q, wo]
+    
+    Gc4 = tf([1 0 wg^2], [1 coefs4(3)/coefs4(2) coefs4(3)^2])*tf(1, [coefs4(1) 1]);
+    Ga4 = G + Gc4;
+    
+    CheckTF(Gc4, 'Gc4', tfverbose, tfplots);
+    CheckTF(Ga4, 'Ga4', tfverbose, tfplots);
+    
+    CheckLPRS(Ga4, 'Ga4', warr, c, fs, lprsverbose, lprsplots);
+    
+    clear coefs4
+end
 
 %% Compensator implementation
 % Compensator 1 chosen
@@ -220,3 +224,7 @@ Rout = 1e3; % Ohm
 fprintf('\nRin1 needed offset: %.f Ohm (actual %.f)\n', Rin1-Rout*Vg/Vc, Rin1);
 fprintf('\nRin2 needed offset: %.f Ohm (actual %.f)\n', Rin2-Rout*Vg/Vc, Rin2);
 fprintf('\nRin3 needed offset: %.f Ohm (actual %.f)\n', Rin3-Rout*Vc, Rin3);
+
+%% Prepare for analysis
+
+clear bE bS c G Ga1 Ga2 Ga3 Ga4 Gc Gc1 Gc2 Gc3 Gc4 KnE KnS lprsplots lprsverbose tfplots tfverbose warr wg Zo
