@@ -35,13 +35,13 @@ tfplots = false;
 
 % LPRS
 fm = 1e6; % Hz - Maximum evaluated switching frequency
-fmstep = 2; % Hz - Evaluated switching frequency step
+fmstep = 1; % Hz - Evaluated switching frequency step
 c = 1; % Relay output amplitude (symmetrical, fixed by H-bridge topology)
 lprsverbose = true; % Whether to print to console LPRS check verbose results
 lprsplots = false; % Whether to plot LPRS check results
 
 % Implementation
-Vc = 12; % V - OpAmp maximum output voltage
+Vc = 18; % V - OpAmp maximum output voltage
 
 %% Compute Low Pass LC filter component values
 % wc^2/(s^2 + 2chi wc + wc^2), LC = 1/(wc)^2, RC = 1/(2chi wc) = Q/wc
@@ -57,7 +57,7 @@ fprintf('\nCf offset: %f F\n', Cf-Cfo);
 Rfo = 0.707*sqrt(Lf*Cf);
 fprintf('\nRf offset: %f Ohm\n', Rf-Rfo);
 
-clear fc
+clear fc Cfo Rfo
 
 %% Compute plant
 G = tf(E, [Lf*Cf, Cf*Rf 1]) % TF - Contribution to Vo from u
@@ -72,7 +72,7 @@ warr = farr*2*pi; % Rad/s - Angular frequency equivalent
 clear fm fmstep farr
 
 %% Compute LPRS for base plant G
-[~, ~, KnS, bS] = CheckLPRS(G, 'G', warr, c, fs, lprsverbose, lprsplots);
+CheckLPRS(G, 'G', warr, c, fs, lprsverbose, lprsplots);
 
 %% Compute PFC (Check ASPRness)
 
@@ -92,7 +92,7 @@ wg = 2*pi*fg; % Grid (reference) angular frequency
 % Parameters
 tau = 7.5e-6;
 Q = 1;
-H = 5;
+H = 1;
 
 %% Compensator 1: Twin T notch
 % Twin T notch is rd = 0, add LP single pole for rd = 1
@@ -108,14 +108,14 @@ if true
     CheckTF(Gc1, 'Gc1', tfverbose, tfplots);
     CheckTF(Ga1, 'Ga1', tfverbose, tfplots);
     
-    [~, ~, ~, ~, bE, KnE] = CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
+    CheckLPRS(Ga1, 'Ga1', warr, c, fs, lprsverbose, lprsplots);
     
     clear coefs1
 end
 
 %% Compensator 2: Twin T notch w/ feedback
 % Twin T notch is rd = 0, add LP single pole for rd = 1
-if false
+if true
     fprintf('\n-- Compensator 2: Twin T notch w/ feedback + LP pole --\n');
     
     % Implements: Gc2 = tf([1 0 wg^2], [1 wg/Q wg^2])*tf(1, [tau 1]);
@@ -153,11 +153,11 @@ end
 
 %% Compensator 4: Boctor notch
 % Boctor notch is rd = 0, add LP single pole for rd = 1
-if false
+if true
     fprintf('\n-- Compensator 4: Boctor notch + LP pole --\n');
     
     % Implements: Gc4 = tf([1 0 wg^2], [1 wo/Q wo^2])*tf(1, [tau 1]);
-    coefs4 = [tau, Q, wg/2]; % [tau, Q, wo]
+    coefs4 = [tau, Q, wg]; % [tau, Q, wo]
     
     Gc4 = tf([1 0 wg^2], [1 coefs4(3)/coefs4(2) coefs4(3)^2])*tf(1, [coefs4(1) 1]);
     Ga4 = G + Gc4;
@@ -171,45 +171,41 @@ if false
 end
 
 %% Compensator implementation
-% Compensator 1 chosen
-% Twin T notch - http://sim.okawa-denshi.jp/en/TwinTCRkeisan.htm
-% RC low-pass - http://sim.okawa-denshi.jp/en/CRtool.php
+% Compensator 1 chosen (Twin T + LP)
+fprintf('\n-- Implementation 1: Twin T notch + LP pole --\n');
 
-Rc1 = 47e3;
-Rc2 = 47e3;
-Rc3 = 12e3;
-
-Cc1 = 100e-9;
-Cc2 = 100e-9;
+Rc1 = 68e3;
+Rc2 = 68e3;
+Rc3 = 33e3;
+Cc1 = 47e-9;
+Cc2 = 47e-9;
 Cc3 = 100e-9;
 
-Rclp = 750;
+Rclp = 3.3e3;
+Cclp = 2.2e-9;
 
-Cclp = 10e-9;
+Rn = mean([Rc1, Rc2, 2*Rc3]);
+Cn = mean([Cc1, Cc2, Cc3/2]);
 
-Rc = mean([Rc1, Rc2, 2*Rc3]);
-Cc = mean([Cc1, Cc2, Cc3/2]);
+Gc = tf([1 0 1/(Rn*Cn)^2], [1 4/(Rn*Cn) 1/(Rn*Cn)^2]) * tf(1, [Rclp*Cclp 1]);
+Ga = G + Gc;
 
-Gc = tf([1 0 (1/(Rc*Cc))^2], [1 4/(Rc*Cc) (1/(Rc*Cc))^2]) * tf(1, [Rclp*Cclp 1]);
-
-figure, hold on;
-bode(Gc1, Gc), xline(wg);
-title("Compensator realization"), legend(["Designed", "Realization", "50 Hz"]);
-
-clear Rc Cc
+CheckTF(Gc, 'Gc', tfverbose, tfplots);
+CheckTF(Ga, 'Ga', tfverbose, tfplots);
+[~, ~, ~, ~, bS] = CheckLPRS(Ga, 'Ga', warr, c, fs, lprsverbose, lprsplots);
 
 %% Cleanup compensator design stage
-clear tau Q H
+clear Rn Cn
 
 %% Relay realization
 % Schmitt trigger
 
 % bE/Vc = Rst1/Rst2
-Rst1 = 1e3; % Ohm
-Rst2 = 56e3; % Ohm
+Rst1 = 1.5e3; % Ohm
+Rst2 = 120e3; % Ohm
 
-fprintf('\nRelay hysteresis offset : %.2f mV (actual %.2f)\n', 1e3*(Vc*Rst1/Rst2-bE), bE*1e3);
-fprintf('\nRst2 needed offset: %.f Ohm (%.f)\n', Rst2-Vc*Rst1/bE, Rst2);
+fprintf('\nRelay hysteresis offset : %.2f mV (actual %.2f)\n', 1e3*(Vc*Rst1/Rst2-bS), bS*1e3);
+fprintf('\nRst2 needed offset: %.f Ohm (%.f)\n', Rst2-Vc*Rst1/bS, Rst2);
 
 %% Error calculation
 % Inverting summing amplifier
@@ -217,14 +213,13 @@ fprintf('\nRst2 needed offset: %.f Ohm (%.f)\n', Rst2-Vc*Rst1/bE, Rst2);
 % Vout = -sum(Vin*Rout/Rin)
 Rin1 = 27e3; % Ohm - Output feedback
 Rin2 = 27e3; % Ohm - Reference
-Rin3 = 12e3; % Ohm - Compensator feedback
+Rin3 = 22e3; % Ohm - Compensator feedback
+Rout = 1.2e3; % Ohm
 
-Rout = 1e3; % Ohm
-
-fprintf('\nRin1 needed offset: %.f Ohm (actual %.f)\n', Rin1-Rout*Vg/Vc, Rin1);
-fprintf('\nRin2 needed offset: %.f Ohm (actual %.f)\n', Rin2-Rout*Vg/Vc, Rin2);
-fprintf('\nRin3 needed offset: %.f Ohm (actual %.f)\n', Rin3-Rout*Vc, Rin3);
+fprintf('\nRin1 needed offset: %.f Ohm (actual %.f), has %.e gain unit error\n', Rin1-Rout*E/Vc, Rin1, (Rout/Rin1-Vc/E)/(Vc/E));
+fprintf('\nRin2 needed offset: %.f Ohm (actual %.f), has %.e gain unit error\n', Rin2-Rout*E/Vc, Rin2, (Rout/Rin2-Vc/E)/(Vc/E));
+fprintf('\nRin3 needed offset: %.f Ohm (actual %.f), has %.e gain unit error\n', Rin3-Rout*Vc, Rin3, (Rout/Rin3-1/Vc)/(1/Vc));
 
 %% Prepare for analysis
 
-clear bE bS c G Ga1 Ga2 Ga3 Ga4 Gc Gc1 Gc2 Gc3 Gc4 KnE KnS lprsplots lprsverbose tfplots tfverbose warr wg Zo
+clear tau Q H bS c G Ga Ga1 Ga2 Ga3 Ga4 Gc Gc1 Gc2 Gc3 Gc4 lprsplots lprsverbose tfplots tfverbose warr wg Zo

@@ -65,17 +65,20 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
         figure;
         
         %Plot J
-        subplot(2, 1, 1), hold on;
+        subplot(2, 1, 1);
+        hold on;
         plot(real(J), imJ, 'DisplayName', 'J(w)');
-        title("J(w)"), xlabel("Re J(w)"), ylabel("Im J(w)");
         if (c ~= 0) && (bE ~= 0)
             yline(-pi*bE/(4*c), "--", "LineWidth", 2, 'DisplayName', '-pi*b/(4*c)');
-            legend();
+            legend('Location','northwest');
         end
         hold off;
+        yscale log;
+        xlabel("Re J(w)"), ylabel("Im J(w)");
         
-        %Plot Im J vs w        
-        subplot(2, 1, 2), hold on;
+        %Plot Im J vs w
+        subplot(2, 1, 2);
+        hold on;
         plot(wArr(JSMask), imJ(JSMask), ".", 'DisplayName', 'Stable');
         plot(wArr(~JSMask), imJ(~JSMask), ".", 'DisplayName', 'Unstable');
         plot(wArr(JSLimitsStartMask), imJ(JSLimitsStartMask), "diamond", "LineWidth", 2, 'DisplayName', 'Stabilization');
@@ -86,12 +89,11 @@ function [wS, iwS, KnS, bS, bE, KnE] = CheckLPRS(G, name, wArr, c, fe, verbose, 
             yline(-pi*bE/(4*c), ":", "LineWidth", 2, 'DisplayName', '-pi*bE/(4*c)');
             plot(we, imag(JE), "o", "LineWidth", 2, 'DisplayName', sprintf('we (%.0f kHz)', fe/1e3))
         end
-
-        title("Im J(w)"), xlabel("w"), ylabel("Im J(w)");
-        legend();    
-        
-        xscale log;
         hold off;
+        xlabel("w (rad/s)"), ylabel("Im J(w)");
+        legend('Location','northwest');
+        yscale log;
+        xscale log;
 
         sgtitle(sprintf('LPRS characteristics for %s', name));
     end
